@@ -1,0 +1,554 @@
+---
+title: "HarvardX: Data Science  \n   Bike Sharing Count Prediction Project"
+author: "Sabiny Chungath Abdul Jaleel"
+date: "9/11/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This is the final project part of Professional Certificate for Data Science course from Harvard University using R programming language. The objective of this project is to analyse the 'BikeSharing' dataset and predict the bike sharing count based on the dataset. This dataset contains datetime, season, holiday, workingday, weather, temp, atemp, humidity,
+windspeed, casual, registererd, count etc. 
+
+Bike sharing systems are a means of renting bicycles where the process of obtaining membership, rental, and bike return is automated via a network of kiosk locations throughout a city. Using these systems, people are able rent a bike from a one location and return it to a different place on an as-needed basis. Currently, there are over 500 bike-sharing programs around the world.
+
+Attribute Information:
+Both train.csv and test.csv have the following fields:
+
+- datetime   : date + timestamp in "mm/dd/yyyy hh:mm" format
+- season     : seasons (1:spring, 2:summer, 3:fall, 4:winter)
+- holiday    : whether the day is considered a holiday
+- workingday : whether the day is neither a weekend nor holiday
+- weather    : Type of weather (1:Good, 2:Normal, 3:Bad, 4:Very Bad)
+- temp       : Normalized temperature in Celsius.
+- atemp      : "feels like" temperature in Celsius 
+- humidity   : relative humidity 
+- windspeed  : Normalized wind speed. 
+- casual     : count of casual users
+- registered : count of registered users
+- count      : count of total rental bikes including both casual and registered
+
+
+# Methods & Analysis
+
+The bike sharing dataset shows 11 columns. We are ignoring the casual and registered fields as this sum is equal to count field. Here we also analysing the average count of bikes rent by season, weather and day.
+
+The goal is to train a machine learning algorithm using the inputs of a provided training subset to predict bike sharing counts in a validation set. Here, 4 different algorithms are used to predict the accuracy. We applied K Nearest Neighbor(KNN) Model, Support Vector Machine (SVM) Model, Linear Regression Model and Random Forest Model. We found that random forest is performing the best.
+
+The focus is on the predictive accuracy of the algorithm. During analysis we will review RMSE and rmsle(log RMSE). We will finally report both RMSE and rmsle.
+
+
+## Loading the Dataset
+
+We will utilize and load several packages from CRAN to assist with our analysis. These will be automatically downloaded and installed during code execution. 
+
+```{r loading data, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+#############################################################
+# Load the data sets from GitHub link
+#############################################################
+if(!require(tidyverse)) install.packages("tidyverse",repos="http://cran.us.r-project.org")
+if(!require(tidyr)) install.packages("tidyr",repos="http://cran.us.r-project.org")
+if(!require(tidyverse)) install.packages("tidyverse",repos="http://cran.us.r-project.org")
+if(!require(stringr)) install.packages("stringr",repos="http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("ggplot2",repos="http://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr",repos="http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret",repos="http://cran.us.r-project.org")
+if(!require(e1071)) install.packages("e1071",repos="http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest",repos="http://cran.us.r-project.org")
+if(!require(sqldf)) install.packages("sqldf",repos="http://cran.us.r-project.org")
+if(!require(corrplot)) install.packages("corrplot",repos="http://cran.us.r-project.org")
+if(!require(funModeling)) install.packages("funModeling",repos="http://cran.us.r-project.org")
+if(!require(caTools)) install.packages("caTools",repos="http://cran.us.r-project.org")
+if(!require(Metrics)) install.packages("Metrics",repos="http://cran.us.r-project.org")
+# Loading all needed libraries
+
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(ggplot2)
+library(caret)
+library(corrplot)
+
+
+bike_share_train <- read.csv(
+  "https://raw.githubusercontent.com/sabinychungath/Bike-Sharing/master/train.csv", 
+  header = TRUE)
+bike_share_test <- read.csv(
+  "https://raw.githubusercontent.com/sabinychungath/Bike-Sharing/master/test.csv",
+  header = TRUE)
+
+```
+\pagebreak
+
+## Data Exploration
+
+```{r list first few lines of train & test dataset, echo = TRUE}
+#List first few lines of bike sharing dataset
+head(bike_share_train)
+```
+
+```{r type of bike sharing dataset, echo = TRUE}
+#Type of bike sharing dataset
+class(bike_share_train)
+```
+```{r list first few lines of train dataset, echo = TRUE}
+names(bike_share_train)
+```
+
+```{r variable datatype of bike sharing dataset, echo = TRUE}
+#Variables data types
+str(bike_share_train)
+colnames(bike_share_train)
+```
+
+```{r summary of bike sharing dataset, echo = TRUE}
+# summary statistics
+summary(bike_share_train)
+```
+
+\pagebreak
+
+## Data Cleaning
+In this section we will take the first look at the loaded data frames. We will also perform necessary cleaning and some transformations so that the data better suits our needs. Here we are ignore the casual and registered fields as this sum is equal to count field.
+
+```{r data cleaning, echo = TRUE}
+# Ignore the casual, registered fields as this sum is equal to count field
+bike_share_train <- bike_share_train[,-c(10,11)]
+```
+
+
+Now we need to look if there are any missing values in our dataframe.
+
+```{r check-na-data, echo = TRUE}
+# Check for NA values
+#Missing values in dataset
+missing_value <- data.frame(apply(bike_share_train,2,
+                                function(x)
+                                  {
+                                  sum(is.na(x))
+                                  }
+                                ))
+names(missing_value)[1]='missing_value'
+missing_value
+```
+
+
+Above you can see that Our dataset has no missing values in the data frame.
+Let's transform our variables to class **factor** for using them in our analysis.
+
+```{r convert integer to factor on training set, echo = TRUE}
+# Converting integer to factor on training set
+bike_share_train$season <- as.factor(bike_share_train$season)
+bike_share_train$holiday <- as.factor(bike_share_train$holiday)
+bike_share_train$workingday <- as.factor(bike_share_train$workingday)
+bike_share_train$weather <- as.factor(bike_share_train$weather)
+bike_share_train$datetime <-as.POSIXct(bike_share_train$datetime, 
+                                       format="%Y-%m-%d %H:%M:%S")
+```
+
+```{r convert integer to factor on test set, echo = TRUE}
+# Converting int to factor on test set
+bike_share_test$season <- as.factor(bike_share_test$season)
+bike_share_test$holiday <- as.factor(bike_share_test$holiday)
+bike_share_test$workingday <- as.factor(bike_share_test$workingday)
+bike_share_test$weather <- as.factor(bike_share_test$weather)
+bike_share_test$datetime <-as.POSIXct(bike_share_test$datetime, 
+                                      format="%Y-%m-%d %H:%M:%S")
+```
+
+Till now, we have got a fair understanding of the data set. Now, let’s test the hypothesis which we had generated earlier.  Here I have added some additional hypothesis from the dataset. Let’s test them one by one:
+
+```{r Extract day from datetime, echo = TRUE}
+# Extract day from datetime value
+bike_share_train$day <-  strftime(bike_share_train$datetime, '%u')
+bike_share_train$day <- as.factor(bike_share_train$day)
+bike_share_test$day <-  strftime(bike_share_test$datetime, '%u')
+bike_share_test$day <- as.factor(bike_share_test$day)
+```
+
+Let's extract hour from the datetime filed of both train and test datasets to find the bikes are rented out is more on which hour.
+We don’t have the variable ‘hour’ with us right now. But we can extract it using the datetime column to find the bikes are rented out is more on weekdays or weekends.
+```{r Extract hour from datetime, echo = TRUE}
+# Extract hour from datetime value
+bike_share_train$hour <- substring(bike_share_train$datetime, 12,13)
+bike_share_train$hour <- as.factor(bike_share_train$hour)
+bike_share_test$hour <- substring(bike_share_test$datetime, 12,13)
+bike_share_test$hour <- as.factor(bike_share_test$hour)
+```
+Let’s plot the hourly trend of count over hours and check if our hypothesis is correct or not. We will separate train and test data set from combined one.
+
+```{r Plot the extracted day from datetime, echo = TRUE}
+boxplot(bike_share_train$count ~ bike_share_train$hour,xlab="hour", ylab="count of users")
+```
+Above, you can see the trend of bike count over hours. Quickly, I’ll segregate the bike demand in three categories:
+
+- High       : 7-9 and 17-19 hours
+
+- Average  : 10-16 hours
+
+- Low         : 0-6 and 20-24 hours
+
+Here I have analyzed the distribution of total bike demand.
+
+We are going to remove the datetime field after extract hour and day from that.
+
+```{r Removing datetime, echo = TRUE}
+# Removing datetime field 
+bike_share_train <- bike_share_train[,-1]
+```
+
+```{r list first few lines of train & test dataset after cleaning, echo = TRUE}
+#list first few lines of train & test dataset after cleaning
+head(bike_share_train)
+head(bike_share_test)
+```
+\pagebreak
+
+## Data Visualization
+
+```{r average count of bikes rent by season, echo = TRUE}
+library(sqldf)
+library(ggplot2)
+# Get the average count of bikes rent by season, hour
+season_hour <- sqldf(
+  'select season, hour, avg(count) as count from bike_share_train group by season, hour')
+
+#Plot average count of bikes rent by season & hour
+bike_share_train %>%
+  ggplot(aes(x=hour, y=count, color=season)) +
+  geom_point(data = season_hour, aes(group = season)) +
+  geom_line(data = season_hour, aes(group = season)) +
+  ggtitle("Bikes Rent By Season") + 
+  scale_colour_hue('Season',breaks = levels(bike_share_train$season), 
+                   labels=c('spring', 'summer', 'fall', 'winter'))
+  
+```
+
+From this plot it shows: 
+
+- There are more rental in morning(from 7-9th hour) and evening(16-19th hour)
+
+- People rent bikes more in Fall, and much less in Spring
+
+\pagebreak
+
+```{r average count of bikes rent by weather, echo = TRUE}
+# Get the average count of bikes rent by weather, hour
+weather_hour <- sqldf(
+  'select weather, hour, avg(count) as count from bike_share_train group by weather, hour')
+
+#Plot average count of bikes rent by weather & hour
+bike_share_train %>%
+  ggplot(aes(x=hour, y=count, color=weather)) +
+  geom_point(data = weather_hour, aes(group = weather)) +
+  geom_line(data = weather_hour, aes(group = weather)) +
+  ggtitle("Bikes Rent By Weather") + 
+  scale_colour_hue('Weather',breaks = levels(bike_share_train$weather), 
+                   labels=c('Good', 'Normal', 'Bad', 'Very Bad'))
+
+```
+
+From this plot it shows, 
+
+- People rent bikes more when weather is good
+
+-We see bike rent only at 18th hour when weather is very bad
+
+\pagebreak
+
+```{r average count of bikes rent by day, echo = TRUE}
+#average count of bikes rent by day & hour
+day_hour <- sqldf(
+  'select day, hour, avg(count) as count from bike_share_train group by day, hour')
+
+#Plot average count of bikes rent by day & hour
+bike_share_train %>%
+  ggplot(aes(x=hour, y=count, color=day)) +
+  geom_point(data = day_hour, aes(group = day)) +
+  geom_line(data = day_hour, aes(group = day)) +
+  ggtitle("Bikes Rent By day") + 
+  scale_colour_hue('Day',breaks = levels(bike_share_train$day), 
+    labels=c('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'))
+```
+
+From this plot it shows, 
+
+- There are more bikes rent on weekdays during morining and evening
+
+- There are more bikes rent on weekends during daytime
+
+\pagebreak
+
+Now, I’ll plot a histogram for each numerical variables and analyze the distribution.
+
+```{r Plotting Numerical bike_sharing, echo = TRUE}
+library(funModeling)
+# Plotting Numerical bike_sharing
+plot_num(bike_share_train)
+```
+Here, variables temp, atemp, humidity and windspeed looks naturally distributed.
+
+## Correlation Analysis
+
+```{r Correlation plot between fields, echo = TRUE}
+# Correlation plot between fields
+bike_share_train_subset <- bike_share_train[,5:9]
+bike_share_train_subset$humidity <- as.numeric(bike_share_train_subset$humidity)
+bike_share_train_subset$count <- as.numeric(bike_share_train_subset$count)
+
+train_cor <- cor(bike_share_train_subset)
+corrplot(train_cor, method = 'color', addCoef.col="black")
+```
+This correlationplot shows that temp, atemp has much correlation.
+
+## Splitting the Train dataset
+
+```{r splitting the train dataset, echo = TRUE}
+library(caTools)
+set.seed(123)
+split <- sample.split(bike_share_train$count, SplitRatio = 0.75)
+training_set <- subset(bike_share_train, split == TRUE)
+validation_set <- subset(bike_share_train, split == FALSE)
+```
+
+\pagebreak
+
+# Model Development
+The goal is to train a machine learning algorithm that predicts bike sharing counts using the inputs of a above subset to predict movie ratings in a provided validation set.
+
+The loss-function computes the RMSE, defined as follows:
+
+$$ RMSE = \sqrt{\frac{1}{N}\displaystyle\sum_{u,i} (\hat{y}_{u,i}-y_{u,i})^{2}} $$
+
+with N being the number of user/movie combinations and the sum occurring over all these combinations.
+The RMSE is our measure of model accuracy. We can interpret the RMSE similarly to a standard deviation: it is the typical error we make when predicting a movie rating. If its result is larger than 1, it means that our typical error is larger than one star, which is not a good result.
+The written function to compute the RMSE for vectors of ratings and their corresponding predictions is:
+
+```{r RMSE function, echo = TRUE}
+RMSE <- function(true_ratings, predicted_ratings){
+  sqrt(mean((true_ratings - predicted_ratings)^2))
+}
+```
+
+## K Nearest Neighbor(KNN) Model
+
+The next method to consider is the "Nearest Neighbours", here the 
+K-nearest neighbours. This will find the k closest matching points from
+the training data. These will have their results averaged to find the
+predicted outcome.
+The value of K is a tuning parameter, and the following code will 
+attempt to find the most appropriate value.
+
+```{r knn model, echo = TRUE}
+#Training the model
+knn_model <- train(count ~ ., method = "knn",data = training_set)
+
+# Apply prediction on validation set
+knn_predict <- predict(knn_model, newdata = validation_set)
+print("summary of KNN prediction")
+summary(knn_predict)
+```
+
+```{r knn model RMSE, echo = TRUE}
+library(Metrics)
+#Root-mean-square error value between actual and predicted
+knn_RMSE <- RMSE(validation_set$count,knn_predict)
+print("RMSE value between actual and predicted")
+knn_RMSE
+```
+
+```{r knn model log RMSE, echo = TRUE}
+#If we want to penalize under-prediction of count, rmsle might be a better metric
+knn_log_RMSE<-rmsle(validation_set$count,knn_predict)
+print("Log RMSE value")
+knn_log_RMSE
+```
+
+```{r knn Residual vs Fitted plot, echo = TRUE}
+#Residual plot vs Fitted plot
+y_test <- validation_set$count
+residuals <- y_test - knn_predict
+plot(y_test,residuals,
+     xlab='Observed',
+     ylab='Residuals',
+     main='Residual plot')
+abline(0,0)
+```
+Our RMSE score for KNN was 139.5918 and rmsle score 1.304029. Not an improvement; We can try another model for better rmsle. 
+
+## SVM - Support Vector Machine Model
+
+```{r svm model, echo = TRUE}
+library(e1071)
+#Training the model
+svm_model <- svm(count ~ ., data = training_set, kernel='sigmoid')
+
+# Apply prediction on validation set
+svm_predict <- predict(svm_model, newdata = validation_set)
+print("summary of SVM prediction")
+summary(svm_predict)
+```
+
+```{r svm model RMSE, echo = TRUE}
+#Root-mean-square error value between actual and predicted
+svm_RMSE<-RMSE(validation_set$count,svm_predict)
+print("RMSE value between actual and predicted")
+svm_RMSE
+```
+From above summary we saw negative values of predicted count.
+We don't want negative values as forecast for bike count. Replace all negative numbers with 1
+
+```{r svm replace negative numbers with 1, echo = TRUE}
+#Replace all negative numbers with 1
+Output_svmMod <- svm_predict
+Output_svmMod[svm_predict<=0] <- 1
+```
+
+```{r svm model log RMSE, echo = TRUE}
+#If we want to penalize under-prediction of demand, rmsle might be a better metric
+svm_log_RMSE<-rmsle(validation_set$count,Output_svmMod)
+print("RMSE value after replaced the negative values")
+svm_log_RMSE
+```
+
+```{r svm Residual vs Fitted plot, echo = TRUE}
+#Residual plot
+y_test <- validation_set$count
+residuals <- y_test - svm_predict
+plot(y_test,residuals,
+     xlab='Observed',
+     ylab='Residuals',
+     main='Residual plot')
+abline(0,0)
+```
+Our RMSE score for SVM was  128.4377 and rmsle score 1.179682. Not an improvement; We can try another model for better rmsle.
+
+## Linear Regression model
+
+Linear regression is a linear approach to modeling the relationship between a scalar response and one or more explanatory variables.
+
+```{r linear regression model, echo = TRUE}
+#Training the model
+lm_model <- lm(count~., data = training_set)
+
+#Stepwise Model Selection
+# Now performs stepwise model selection by AIC with both directions(Forward, Backward)
+library(MASS)
+lm_model_AIC<-stepAIC(lm_model, direction="both")
+```
+
+```{r lm prediction, echo = TRUE}
+# Apply prediction on validation set
+lm_predict <- predict(lm_model_AIC, newdata = validation_set)
+print("summary of lm prediction")
+summary(lm_predict)
+```
+
+```{r lm model RMSE, echo = TRUE}
+#RMSE value between actual and predicted
+lm_RMSE<-RMSE(validation_set$count,lm_predict)
+print("RMSE value between actual and predicted")
+lm_RMSE
+```
+From above summary we saw negative values of predicted count.
+We don't want negative values as forecast for bike count. Replace all negative numbers with 1
+
+```{r replace negative numbers with 1, echo = TRUE}
+#Replace all negative numbers with 1
+Output_lmMod <- lm_predict
+Output_lmMod[lm_predict<=0] <-1
+```
+
+```{r lm model log RMSE, echo = TRUE}
+#If we want to penalize under-prediction of demand, rmsle might be a better metric
+lm_log_RMSE<-rmsle(validation_set$count,Output_lmMod)
+print("RMSE value after replaced the negative values")
+lm_log_RMSE
+```
+
+```{r lm Residual vs Fitted plot, echo = TRUE}
+#Residual plot vs Fitted plot
+y_test <- validation_set$count
+residuals <- y_test - lm_predict
+plot(y_test,residuals,
+     xlab='Observed',
+     ylab='Residuals',
+     main='Residual plot')
+abline(0,0)
+```
+Our RMSE score for Linear Regression Model was  102.8466 and rmsle score 0.9549201. Not an improvement; We can try another model for better rmsle.
+
+## Random Forest Model
+
+Random forests or random decision forests are an ensemble learning method for classification, regression and other tasks that operates by constructing a multitude of decision trees at training time and outputting the class that is the mode of the classes (classification) or mean prediction (regression).
+
+```{r random forest model, echo = TRUE}
+library(randomForest)
+#training the model
+rf_model<-randomForest(count~. ,data = training_set,importance=TRUE,ntree=200)
+```
+
+```{r random forest prediction, echo = TRUE}
+# Apply prediction on validation set
+rf_predict <- predict(rf_model, newdata = validation_set)
+print("summary of random forest prediction")
+summary(rf_predict)
+```
+
+```{r random forest model RMSE, echo = TRUE}
+#RMSE value between actual and predicted
+rf_RMSE <- RMSE(validation_set$count,rf_predict)
+print("RMSE value between actual and predicted")
+rf_RMSE
+```
+
+```{r random forest model log RMSE, echo = TRUE}
+#If we want to penalize under-prediction of demand, rmsle might be a better metric
+rf_log_RMSE<-rmsle(validation_set$count,rf_predict)
+print("log RMSE value")
+rf_log_RMSE
+```
+
+```{r random forest Residual vs Fitted plot, echo = TRUE}
+#Residual plot
+y_test <- validation_set$count
+residuals <- y_test - rf_predict
+plot(y_test,residuals,
+     xlab='Observed',
+     ylab='Residuals',
+     main='Residual plot')
+abline(0,0)
+```
+We see a better fitting model here. We observe that Random forest model gets down the RMSE's to 66.31489 and rmsle value to  0.6376547.
+
+\pagebreak
+
+# Results
+
+The results of 4 models are shown in the table below. It is clearly shown that the best model in terms of RMSE and rmsle is the Random Forest Model.
+The RMSE and log RMSE values of all the represented models are the following:
+
+```{r final dataframe, echo = FALSE}
+RMSE_results <- data.frame(Method = c("K Nearest Neighbor(KNN) Model",
+                                      "Support Vector Machine (SVM) Model",
+                                      "Linear Regression Model", 
+                                      "Random Forest Model"), 
+                           RMSE = c(knn_RMSE, svm_RMSE, lm_RMSE, rf_RMSE),
+                           rmsle = c(knn_log_RMSE, svm_log_RMSE, lm_log_RMSE, rf_log_RMSE))
+
+RMSE_results %>% knitr::kable()
+```
+We therefore found the lowest value of RMSE that is 66.31489 and lowest value of rmsle is  0.6376547.
+
+
+# Conclusion
+
+The goal of this project was to develop a best bike sharing count of casual and registered users to predict bike count using bike sharing dataset, therefore machine learning algorithm has been built to predict bike count with this dataset. From the above output, we see that Random Forest works best for our dataset prediction.
+
+The optimal model characterised by the lowest RMSE value (66.31489) and lowest value of rmsle value (0.6376547). The resultant RMSE_results table shows an improvement of the model over different assumptions. The goal is to train a machine learning algorithm using the inputs of a provided training subset to predict bike sharing counts in a validation set. Here, 4 different algorithms are used to predict the accuracy. We applied K Nearest Neighbor(KNN) Model, Support Vector Machine (SVM) Model, Linear Regression Model and Random Forest Model. We found that random forest is performing the best. A deeper insight into the data revealed some data point in the features have large effect on errors. The final RMSE is 66.31489 and rmsle is 0.6376547. This implies we can trust our prediction for bike sharing system.
+
+\pagebreak
